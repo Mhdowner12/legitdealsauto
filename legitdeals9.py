@@ -25,7 +25,14 @@ async def get_chat_ids(app: Client):
                 pass
         if dialog.chat.type in ["group", "supergroup"]:
             chat_ids.append(dialog.chat.id)
-    return [chat_ids, chat_with_topic]
+    return chat_ids, chat_with_topic
+
+async def is_chat_accessible(app: Client, chat_id: int) -> bool:
+    try:
+        await app.get_chat(chat_id)
+        return True
+    except Exception:
+        return False
 
 async def send_last_message_to_groups(apps, timee, numtime):
     async def send_last_message(app: Client):
@@ -33,18 +40,19 @@ async def send_last_message_to_groups(apps, timee, numtime):
         chat_ids = ac[0]
         chat_with_topic = ac[1]
 
-        for _ in range(numtime):
-            try:
-                async for message in app.get_chat_history('me', limit=1):
-                    last_message = message.id
-                    break
-            except Exception as e:
-                print(f"{Fore.RED}Failed to fetch last message: {e}")
-                last_message = None
+        # Fetch the last message from your own chat history
+        try:
+            async for message in app.get_chat_history('me', limit=1):
+                last_message = message.id
+                break
+        except Exception as e:
+            print(f"{Fore.RED}Failed to fetch last message: {e}")
+            return  # Exit if last message cannot be fetched
 
-            if last_message is not None:
-                # Process groups with topics (like forum groups)
-                for chat_id in chat_with_topic.keys():
+        if last_message is not None:
+            # Check access and send to groups with topics (e.g., forum groups)
+            for chat_id in chat_with_topic.keys():
+                if await is_chat_accessible(app, chat_id):
                     try:
                         await app.forward_messages(
                             chat_id=chat_id, 
@@ -54,21 +62,24 @@ async def send_last_message_to_groups(apps, timee, numtime):
                         )
                         print(f"{Fore.GREEN}Message sent to chat_id {chat_id} (with topic)")
                     except Exception as e:
-                        # Skip if you can't access the group
-                        print(f"{Fore.RED}Skipping chat_id {chat_id}. Reason: {e}")
-                    await asyncio.sleep(2)
+                        print(f"{Fore.RED}Failed to send to chat_id {chat_id} (with topic). Reason: {e}")
+                else:
+                    print(f"{Fore.YELLOW}Skipping chat_id {chat_id} (with topic) due to access restrictions.")
+                await asyncio.sleep(2)
 
-                # Process normal groups and supergroups
-                for chat_id in chat_ids:
+            # Check access and send to normal groups and supergroups
+            for chat_id in chat_ids:
+                if await is_chat_accessible(app, chat_id):
                     try:
                         await app.forward_messages(chat_id, "me", last_message)
                         print(f"{Fore.GREEN}Message sent to chat_id {chat_id}")
                     except Exception as e:
-                        # Skip if you can't access the group
-                        print(f"{Fore.RED}Skipping chat_id {chat_id}. Reason: {e}")
-                    await asyncio.sleep(5)
+                        print(f"{Fore.RED}Failed to send to chat_id {chat_id}. Reason: {e}")
+                else:
+                    print(f"{Fore.YELLOW}Skipping chat_id {chat_id} due to access restrictions.")
+                await asyncio.sleep(5)
 
-            await asyncio.sleep(timee)
+        await asyncio.sleep(timee)
 
     # Run the function for all active sessions
     await asyncio.gather(*(send_last_message(app) for app in apps))
