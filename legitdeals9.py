@@ -1,5 +1,5 @@
 from pyrogram import Client
-import asyncio  # Make sure to import asyncio
+import asyncio
 from colorama import Fore, Style, init
 from pyfiglet import figlet_format
 
@@ -7,9 +7,7 @@ init(autoreset=True)
 
 # Function to print the promotional message and your name in big blue letters
 def print_big_name(name):
-    # Print promotional message in red
     print(f"{Fore.RED}For Buy this Script tg : @LegitDeals9")
-    # Print your name in big blue letters
     ascii_art = figlet_format(name)
     print(f"{Fore.BLUE}{ascii_art}")
 
@@ -25,7 +23,7 @@ async def get_chat_ids(app: Client):
                 chat_with_topic[dialog.chat.id] = dialog.top_message.topics.id
             except AttributeError:
                 pass
-        if dialog.chat.type in ["group", "supergroup"]:  # Ensure you're only adding groups
+        if dialog.chat.type in ["group", "supergroup"]:
             chat_ids.append(dialog.chat.id)
     return [chat_ids, chat_with_topic]
 
@@ -45,6 +43,7 @@ async def send_last_message_to_groups(apps, timee, numtime):
                 last_message = None
 
             if last_message is not None:
+                # Process groups with topics (like forum groups)
                 for chat_id in chat_with_topic.keys():
                     try:
                         await app.forward_messages(
@@ -55,26 +54,23 @@ async def send_last_message_to_groups(apps, timee, numtime):
                         )
                         print(f"{Fore.GREEN}Message sent to chat_id {chat_id} (with topic)")
                     except Exception as e:
-                        if "CHANNEL_PRIVATE" in str(e):
-                            print(f"{Fore.RED}Cannot access chat_id {chat_id} (private or restricted). Skipping.")
-                        else:
-                            print(f"{Fore.RED}Failed to forward message to chat_id {chat_id}: {e}")
+                        # Skip if you can't access the group
+                        print(f"{Fore.RED}Skipping chat_id {chat_id}. Reason: {e}")
                     await asyncio.sleep(2)
 
+                # Process normal groups and supergroups
                 for chat_id in chat_ids:
                     try:
                         await app.forward_messages(chat_id, "me", last_message)
                         print(f"{Fore.GREEN}Message sent to chat_id {chat_id}")
-                        await asyncio.sleep(2)
                     except Exception as e:
-                        if "CHANNEL_PRIVATE" in str(e):
-                            print(f"{Fore.RED}Cannot access chat_id {chat_id} (private or restricted). Skipping.")
-                        else:
-                            print(f"{Fore.RED}Failed to send message to chat_id {chat_id}: {e}")
+                        # Skip if you can't access the group
+                        print(f"{Fore.RED}Skipping chat_id {chat_id}. Reason: {e}")
                     await asyncio.sleep(5)
 
             await asyncio.sleep(timee)
 
+    # Run the function for all active sessions
     await asyncio.gather(*(send_last_message(app) for app in apps))
 
 async def main():
