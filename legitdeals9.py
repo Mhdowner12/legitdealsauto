@@ -1,68 +1,83 @@
 from pyrogram import Client
 import asyncio
 from colorama import Fore, Style, init
-from pyfiglet import figlet_format
+import uuid
 
+# Initialize colorama
 init(autoreset=True)
 
-# Function to print the promotional message and your name in big blue letters
-def print_big_name(name):
-    print(f"{Fore.RED}For Buy this Script tg : @LegitDeals9")
-    ascii_art = figlet_format(name)
-    print(f"{Fore.BLUE}{ascii_art}")
-
-# Print the promotional message and your name
-print_big_name("@LegitDeals9")
-
 async def get_chat_ids(app: Client):
+    """Retrieve chat IDs for groups and supergroups."""
     chat_ids = []
+    chat_with_topic = {}
     async for dialog in app.get_dialogs():
-        if dialog.chat.type in ["group", "supergroup"]:
-            chat_ids.append(dialog.chat.id)
-    return chat_ids
+        if hasattr(dialog.chat, 'is_forum') and dialog.chat.is_forum == True:
+            try:
+                chat_with_topic[dialog.chat.id] = dialog.top_message.topics.id
+            except AttributeError:
+                pass
+        chat_ids.append(dialog.chat.id)
+    # Filter out non-supergroup IDs
+    chat_ids = [chat_id for chat_id in chat_ids if str(chat_id).startswith('-')]
+    return [chat_ids, chat_with_topic]
 
 async def send_last_message_to_groups(apps, timee, numtime):
+    """Send the last message to all groups and supergroups."""
     async def send_last_message(app: Client):
-        # Fetch the last message from your own chat history
-        try:
-            async for message in app.get_chat_history('me', limit=1):
-                last_message = message.id
-                break
-        except Exception as e:
-            print(f"{Fore.RED}Failed to fetch last message: {e}")
-            return  # Exit if last message cannot be fetched
+        ac = await get_chat_ids(app)
+        chat_ids = ac[0]
+        chat_with_topic = ac[1]
 
-        if last_message is not None:
-            chat_ids = await get_chat_ids(app)
+        for i in range(numtime):
+            try:
+                async for message in app.get_chat_history('me', limit=1):
+                    last_message = message.id
+                    break  # Break the loop after fetching the last message
+            except Exception as e:
+                print(f"{Fore.RED}Failed to fetch last message: {e}")
+                last_message = None
 
-            for chat_id in chat_ids:
-                try:
-                    await app.get_chat(chat_id)  # Check if the chat is accessible
-                    await app.forward_messages(chat_id, "me", last_message)
-                    print(f"{Fore.GREEN}Message sent to chat_id {chat_id}")
-                except Exception as e:
-                    handle_error(e, chat_id)  # Handle errors through a dedicated function
-                await asyncio.sleep(2)  # Sleep between sends to avoid rate limiting
+            if last_message is not None:
+                for chat_id, topic_id in chat_with_topic.items():
+                    try:
+                        await app.forward_messages(chat_id=chat_id, from_chat_id="me", message_ids=last_message, message_thread_id=topic_id)
+                        print(f"{Fore.GREEN}Message sent to chat_id {chat_id} with topic")
+                    except Exception as e:
+                        print(f"{Fore.RED}Failed to send message to chat_id {chat_id} with topic due to: {e}")
+                    await asyncio.sleep(2)
 
-            await asyncio.sleep(timee)  # Delay before sending again
+                for chat_id in chat_ids:
+                    try:
+                        await app.forward_messages(chat_id, "me", last_message)
+                        print(f"{Fore.GREEN}Message sent to chat_id {chat_id}")
+                    except Exception as e:
+                        # Enhanced error handling for private/inaccessible channels
+                        if "CHANNEL_PRIVATE" in str(e):
+                            print(f"{Fore.YELLOW}Skipped chat_id {chat_id} - Inaccessible (private channel)")
+                        else:
+                            print(f"{Fore.RED}Failed to send message to chat_id {chat_id}: {e}")
+                    await asyncio.sleep(5)
 
-    # Run the function for all active sessions
+            await asyncio.sleep(timee)
+
     await asyncio.gather(*(send_last_message(app) for app in apps))
 
-def handle_error(e, chat_id):
-    """Handle errors for sending messages."""
-    if "CHANNEL_PRIVATE" in str(e):
-        print(f"{Fore.YELLOW}Skipping chat_id {chat_id}. Reason: This channel is private.")
-    elif "USER_NOT_PARTICIPANT" in str(e):
-        print(f"{Fore.YELLOW}Skipping chat_id {chat_id}. Reason: You are not a participant.")
-    elif "CHAT_ADMIN_REQUIRED" in str(e):
-        print(f"{Fore.RED}Cannot send message to chat_id {chat_id}. Reason: Admin privileges required.")
-    elif "FLOOD_WAIT" in str(e):
-        print(f"{Fore.RED}Rate limit exceeded. Sleeping before retrying.")
-        # Implement a retry after a delay if flood wait is encountered
-        await asyncio.sleep(5)  # Increase the wait time as necessary
-    else:
-        print(f"{Fore.RED}Failed to send to chat_id {chat_id}. Reason: {str(e)}")
+async def leave_chats(app, chat_ids):
+    """Leave all chats in the provided list."""
+    for chat_id in chat_ids:
+        try:
+            await app.leave_chat(chat_id)
+            print(f"{Fore.CYAN}Left chat_id {chat_id}")
+        except Exception as e:
+            print(f"{Fore.RED}Failed to leave chat_id {chat_id}: {e}")
+
+async def join_group(app, chat_id):
+    """Join a specific group by its ID."""
+    try:
+        await app.join_chat(chat_id)
+        print(f"{Fore.MAGENTA}Joined chat_id {chat_id}")
+    except Exception as e:
+        print(f"{Fore.RED}Failed to join chat_id {chat_id}: {e}")
 
 async def main():
     num_sessions = int(input("Enter the number of sessions: "))
@@ -71,19 +86,20 @@ async def main():
     for i in range(num_sessions):
         session_name = f"my_account{i+1}"
         try:
+            # Try loading the existing session
             app = Client(session_name)
             await app.start()
-        except Exception as e:
-            print(f"{Fore.RED}Failed to start session {session_name}: {e}")
+        except:
+            # If the session file doesn't exist, ask for API credentials
             api_id = int(input(f"Enter API ID for {session_name}: "))
-            api_hash = input(f"Enter API hash for {session_name}: ")
+            api_hash = input(f"Enter API Hash for {session_name}: ")
             app = Client(session_name, api_id=api_id, api_hash=api_hash)
             await app.start()
         apps.append(app)
 
     while True:
         a = int(input(
-            f"{Style.BRIGHT}{Fore.YELLOW}2. AutoSender\n6. Exit\nEnter the choice: {Style.RESET_ALL}"
+            f"{Style.BRIGHT}{Fore.YELLOW}2. AutoSender\n3. Auto Group Joiner\n4. Leave all groups\n5. Add user to all groups (will only work with one login)\n6. Exit\nEnter the choice: {Style.RESET_ALL}"
         ))
 
         if a == 2:
@@ -93,6 +109,23 @@ async def main():
                 await send_last_message_to_groups(apps, timee, numtime)
             except Exception as e:
                 print(f"{Fore.RED}Error in AutoSender: {e}")
+
+        elif a == 3:
+            for app in apps:
+                chat_id = input("Enter the Chat ID to join: ")
+                await join_group(app, chat_id)
+
+        elif a == 4:
+            for app in apps:
+                chat_ids = await get_chat_ids(app)
+                await leave_chats(app, chat_ids)
+
+        elif a == 5:
+            user_id = input("Enter the user ID to add to all groups: ")
+            chat_ids = await get_chat_ids(app)
+            for chat_id in chat_ids:
+                for app in apps:
+                    await app.add_chat_members(chat_id, user_id)
 
         elif a == 6:
             for app in apps:
