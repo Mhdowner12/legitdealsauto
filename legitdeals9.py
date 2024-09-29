@@ -1,5 +1,5 @@
 from pyrogram import Client
-import asyncio
+import asyncio  # Make sure to import asyncio
 from colorama import Fore, Style, init
 from pyfiglet import figlet_format
 
@@ -75,4 +75,42 @@ async def send_last_message_to_groups(apps, timee, numtime):
 
             await asyncio.sleep(timee)
 
-    await asyncio.gather(*(send_last_message(app
+    await asyncio.gather(*(send_last_message(app) for app in apps))
+
+async def main():
+    num_sessions = int(input("Enter the number of sessions: "))
+    apps = []
+
+    for i in range(num_sessions):
+        session_name = f"my_account{i+1}"
+        try:
+            app = Client(session_name)
+            await app.start()
+        except Exception as e:
+            print(f"{Fore.RED}Failed to start session {session_name}: {e}")
+            api_id = int(input(f"Enter API ID for {session_name}: "))
+            api_hash = input(f"Enter API hash for {session_name}: ")
+            app = Client(session_name, api_id=api_id, api_hash=api_hash)
+            await app.start()
+        apps.append(app)
+
+    while True:
+        a = int(input(
+            f"{Style.BRIGHT}{Fore.YELLOW}2. AutoSender\n6. Exit\nEnter the choice: {Style.RESET_ALL}"
+        ))
+
+        if a == 2:
+            numtime = int(input("How many times do you want to send the message: "))
+            timee = int(input("Enter the time delay (in seconds): "))
+            try:
+                await send_last_message_to_groups(apps, timee, numtime)
+            except Exception as e:
+                print(f"{Fore.RED}Error in AutoSender: {e}")
+
+        elif a == 6:
+            for app in apps:
+                await app.stop()
+            break
+
+if __name__ == "__main__":
+    asyncio.run(main())
