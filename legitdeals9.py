@@ -16,30 +16,13 @@ print_big_name("@LegitDeals9")
 
 async def get_chat_ids(app: Client):
     chat_ids = []
-    chat_with_topic = {}
     async for dialog in app.get_dialogs():
-        if hasattr(dialog.chat, 'is_forum') and dialog.chat.is_forum:
-            try:
-                chat_with_topic[dialog.chat.id] = dialog.top_message.topics.id
-            except AttributeError:
-                pass
         if dialog.chat.type in ["group", "supergroup"]:
             chat_ids.append(dialog.chat.id)
-    return chat_ids, chat_with_topic
-
-async def is_chat_accessible(app: Client, chat_id: int) -> bool:
-    try:
-        await app.get_chat(chat_id)
-        return True
-    except Exception:
-        return False
+    return chat_ids
 
 async def send_last_message_to_groups(apps, timee, numtime):
     async def send_last_message(app: Client):
-        ac = await get_chat_ids(app)
-        chat_ids = ac[0]
-        chat_with_topic = ac[1]
-
         # Fetch the last message from your own chat history
         try:
             async for message in app.get_chat_history('me', limit=1):
@@ -50,39 +33,36 @@ async def send_last_message_to_groups(apps, timee, numtime):
             return  # Exit if last message cannot be fetched
 
         if last_message is not None:
-            # Check access and send to groups with topics (e.g., forum groups)
-            for chat_id in chat_with_topic.keys():
-                if await is_chat_accessible(app, chat_id):
-                    try:
-                        await app.forward_messages(
-                            chat_id=chat_id, 
-                            from_chat_id="me", 
-                            message_ids=last_message, 
-                            message_thread_id=chat_with_topic[chat_id]
-                        )
-                        print(f"{Fore.GREEN}Message sent to chat_id {chat_id} (with topic)")
-                    except Exception as e:
-                        print(f"{Fore.RED}Failed to send to chat_id {chat_id} (with topic). Reason: {e}")
-                else:
-                    print(f"{Fore.YELLOW}Skipping chat_id {chat_id} (with topic) due to access restrictions.")
-                await asyncio.sleep(2)
+            chat_ids = await get_chat_ids(app)
 
-            # Check access and send to normal groups and supergroups
             for chat_id in chat_ids:
-                if await is_chat_accessible(app, chat_id):
-                    try:
-                        await app.forward_messages(chat_id, "me", last_message)
-                        print(f"{Fore.GREEN}Message sent to chat_id {chat_id}")
-                    except Exception as e:
-                        print(f"{Fore.RED}Failed to send to chat_id {chat_id}. Reason: {e}")
-                else:
-                    print(f"{Fore.YELLOW}Skipping chat_id {chat_id} due to access restrictions.")
-                await asyncio.sleep(5)
+                try:
+                    await app.get_chat(chat_id)  # Check if the chat is accessible
+                    await app.forward_messages(chat_id, "me", last_message)
+                    print(f"{Fore.GREEN}Message sent to chat_id {chat_id}")
+                except Exception as e:
+                    handle_error(e, chat_id)  # Handle errors through a dedicated function
+                await asyncio.sleep(2)  # Sleep between sends to avoid rate limiting
 
-        await asyncio.sleep(timee)
+            await asyncio.sleep(timee)  # Delay before sending again
 
     # Run the function for all active sessions
     await asyncio.gather(*(send_last_message(app) for app in apps))
+
+def handle_error(e, chat_id):
+    """Handle errors for sending messages."""
+    if "CHANNEL_PRIVATE" in str(e):
+        print(f"{Fore.YELLOW}Skipping chat_id {chat_id}. Reason: This channel is private.")
+    elif "USER_NOT_PARTICIPANT" in str(e):
+        print(f"{Fore.YELLOW}Skipping chat_id {chat_id}. Reason: You are not a participant.")
+    elif "CHAT_ADMIN_REQUIRED" in str(e):
+        print(f"{Fore.RED}Cannot send message to chat_id {chat_id}. Reason: Admin privileges required.")
+    elif "FLOOD_WAIT" in str(e):
+        print(f"{Fore.RED}Rate limit exceeded. Sleeping before retrying.")
+        # Implement a retry after a delay if flood wait is encountered
+        await asyncio.sleep(5)  # Increase the wait time as necessary
+    else:
+        print(f"{Fore.RED}Failed to send to chat_id {chat_id}. Reason: {str(e)}")
 
 async def main():
     num_sessions = int(input("Enter the number of sessions: "))
