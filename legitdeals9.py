@@ -1,7 +1,6 @@
 from pyrogram import Client
 import asyncio
 from colorama import Fore, Style, init
-import uuid
 
 # Initialize colorama
 init(autoreset=True)
@@ -11,7 +10,7 @@ async def get_chat_ids(app: Client):
     chat_ids = []
     chat_with_topic = {}
     async for dialog in app.get_dialogs():
-        if hasattr(dialog.chat, 'is_forum') and dialog.chat.is_forum == True:
+        if hasattr(dialog.chat, 'is_forum') and dialog.chat.is_forum:
             try:
                 chat_with_topic[dialog.chat.id] = dialog.top_message.topics.id
             except AttributeError:
@@ -43,7 +42,10 @@ async def send_last_message_to_groups(apps, timee, numtime):
                         await app.forward_messages(chat_id=chat_id, from_chat_id="me", message_ids=last_message, message_thread_id=topic_id)
                         print(f"{Fore.GREEN}Message sent to chat_id {chat_id} with topic")
                     except Exception as e:
-                        print(f"{Fore.RED}Failed to send message to chat_id {chat_id} with topic due to: {e}")
+                        if "CHANNEL_PRIVATE" in str(e):
+                            print(f"{Fore.YELLOW}Skipped chat_id {chat_id} - Inaccessible (private channel)")
+                        else:
+                            print(f"{Fore.RED}Failed to send message to chat_id {chat_id} with topic due to: {e}")
                     await asyncio.sleep(2)
 
                 for chat_id in chat_ids:
@@ -51,7 +53,6 @@ async def send_last_message_to_groups(apps, timee, numtime):
                         await app.forward_messages(chat_id, "me", last_message)
                         print(f"{Fore.GREEN}Message sent to chat_id {chat_id}")
                     except Exception as e:
-                        # Enhanced error handling for private/inaccessible channels
                         if "CHANNEL_PRIVATE" in str(e):
                             print(f"{Fore.YELLOW}Skipped chat_id {chat_id} - Inaccessible (private channel)")
                         else:
@@ -84,7 +85,7 @@ async def main():
     apps = []
 
     for i in range(num_sessions):
-        session_name = f"my_account{i+1}"
+        session_name = f"my_account{i + 1}"
         try:
             # Try loading the existing session
             app = Client(session_name)
