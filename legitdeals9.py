@@ -37,6 +37,7 @@ async def send_last_message_to_groups(apps, timee, numtime):
                 last_message = None
 
             if last_message is not None:
+                # Handle topics separately first
                 for chat_id, topic_id in chat_with_topic.items():
                     try:
                         await app.forward_messages(chat_id=chat_id, from_chat_id="me", message_ids=last_message, message_thread_id=topic_id)
@@ -48,6 +49,7 @@ async def send_last_message_to_groups(apps, timee, numtime):
                             print(f"{Fore.RED}Failed to send message to chat_id {chat_id} with topic due to: {e}")
                     await asyncio.sleep(2)
 
+                # Handle normal chat IDs
                 for chat_id in chat_ids:
                     try:
                         await app.forward_messages(chat_id, "me", last_message)
@@ -90,7 +92,7 @@ async def main():
             # Try loading the existing session
             app = Client(session_name)
             await app.start()
-        except:
+        except Exception as e:
             # If the session file doesn't exist, ask for API credentials
             api_id = int(input(f"Enter API ID for {session_name}: "))
             api_hash = input(f"Enter API Hash for {session_name}: ")
