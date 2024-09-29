@@ -25,9 +25,8 @@ async def get_chat_ids(app: Client):
                 chat_with_topic[dialog.chat.id] = dialog.top_message.topics.id
             except AttributeError:
                 pass
-        chat_ids.append(dialog.chat.id)
-    chat_ids = [str(chat_id) for chat_id in chat_ids if str(chat_id).startswith('-')]
-    chat_ids = [int(chat_id) for chat_id in chat_ids]
+        if dialog.chat.type in ["group", "supergroup"]:  # Ensure you're only adding groups
+            chat_ids.append(dialog.chat.id)
     return [chat_ids, chat_with_topic]
 
 async def send_last_message_to_groups(apps, timee, numtime):
@@ -54,10 +53,12 @@ async def send_last_message_to_groups(apps, timee, numtime):
                             message_ids=last_message, 
                             message_thread_id=chat_with_topic[chat_id]
                         )
-                    except Exception as e:
-                        print(f"Failed to forward message to chat_id {chat_id}: {e}")
-                    else:
                         print(f"{Fore.GREEN}Message sent to chat_id {chat_id}")
+                    except Exception as e:
+                        if "CHANNEL_PRIVATE" in str(e):
+                            print(f"{Fore.RED}Cannot access chat_id {chat_id} (private or restricted). Skipping.")
+                        else:
+                            print(f"{Fore.RED}Failed to forward message to chat_id {chat_id}: {e}")
                     await asyncio.sleep(2)
 
                 for chat_id in chat_ids:
@@ -66,7 +67,10 @@ async def send_last_message_to_groups(apps, timee, numtime):
                         print(f"{Fore.GREEN}Message sent to chat_id {chat_id}")
                         await asyncio.sleep(2)
                     except Exception as e:
-                        print(f"{Fore.RED}Failed to send message to chat_id {chat_id}: {e}")
+                        if "CHANNEL_PRIVATE" in str(e):
+                            print(f"{Fore.RED}Cannot access chat_id {chat_id} (private or restricted). Skipping.")
+                        else:
+                            print(f"{Fore.RED}Failed to send message to chat_id {chat_id}: {e}")
                     await asyncio.sleep(5)
 
             await asyncio.sleep(timee)
